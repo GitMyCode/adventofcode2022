@@ -40,7 +40,6 @@ Find the Elf carrying the most Calories. How many total Calories is that Elf car
  *
  */
 
-
 // use std::io::{self, Read};
 // use std::fs::File;
 
@@ -65,8 +64,8 @@ Find the Elf carrying the most Calories. How many total Calories is that Elf car
 
 use std::env;
 use std::fs;
-use std::io::{self, Read};
 use std::fs::File;
+use std::io::{self, Read};
 
 fn file_to_string(s: &str) -> io::Result<String> {
     let mut file = File::open(s)?;
@@ -75,22 +74,52 @@ fn file_to_string(s: &str) -> io::Result<String> {
     Ok(s)
 }
 
-fn main() {
-    let content = fs::read_to_string("input.txt").expect("correctly read input");
+fn sum_bags(s: &str) -> Vec<i32> {
+    let elf_bags: Vec<&str> = s.split("\n\n").collect();
+    let mut bags: Vec<i32> = Vec::new();
 
-    let content2 = file_to_string("input.txt")
-    .expect("Coulnd't read the input.txt");
-
-    let elf_bags: Vec<&str> = content2.split("\n\n").collect();
-
-
-    let mut max_so_far =0;
-    for bag in elf_bags{
-        let total_for_bag: i32 = bag.lines().map(|x| x.parse::<i32>().unwrap()).sum();
-        max_so_far = if total_for_bag > max_so_far {total_for_bag} else {max_so_far};
+    for raw_bag in elf_bags {
+        let total_for_bag: i32 = raw_bag.lines().map(|x| x.parse::<i32>().unwrap()).sum();
+        bags.push(total_for_bag);
     }
 
-    println!("answer: {}", max_so_far)
+    return bags;
+}
+
+fn part1() {
+    let content = fs::read_to_string("input.txt").expect("correctly read input");
+
+    // let content2 = file_to_string("input.txt").expect("Coulnd't read the input.txt");
+    let mut all_sums = sum_bags(&content);
+    all_sums.sort();
+    // let elf_bags: Vec<&str> = content.split("\n\n").collect();
+
+    // let mut max_so_far = 0;
+    // for bag in elf_bags {
+    //     let total_for_bag: i32 = bag.lines().map(|x| x.parse::<i32>().unwrap()).sum();
+    //     max_so_far = if total_for_bag > max_so_far {
+    //         total_for_bag
+    //     } else {
+    //         max_so_far
+    //     };
+    // }
+
+    println!("answer: {}", all_sums.last().unwrap())
+}
+
+fn part2() {
+    let content = fs::read_to_string("input.txt").expect("correctly read input");
+    let mut all_sums = sum_bags(&content);
+    all_sums.sort_by(|a,b| b.cmp(a));
+
+    let sum_of_3: i32 = all_sums[0..3].iter().sum();
+
+    println!("answer part2 {}", sum_of_3);
+    
+}
+
+fn main() {
+    part2();
     // let mut acc = 0;
     // for l in content2.unwrap().lines(){
     //     ifl.parse<i32>(){
@@ -99,7 +128,6 @@ fn main() {
     //     }
     //     println!("{}", l)
     // }
-
 
     // let split_on_2_newline = content.split("\n\n").collect();
     // for i in split_on_2_newline{
