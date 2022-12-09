@@ -37,17 +37,80 @@ The fifth Elf is carrying one food item with 10000 Calories.
 In case the Elves get hungry and need extra snacks, they need to know which Elf to ask: they'd like to know how many Calories are being carried by the Elf carrying the most Calories. In the example above, this is 24000 (carried by the fourth Elf).
 
 Find the Elf carrying the most Calories. How many total Calories is that Elf carrying?
- * 
+ *
  */
+
+
+// use std::io::{self, Read};
+// use std::fs::File;
+
+// fn filename_to_string(s: &str) -> io::Result<String> {
+//     let mut file = File::open(s)?;
+//     let mut s = String::new();
+//     file.read_to_string(&mut s)?;
+//     Ok(s)
+// }
+
+// fn words_by_line<'a>(s: &'a str) -> Vec<Vec<&'a str>> {
+//     s.lines().map(|line| {
+//         line.split_whitespace().collect()
+//     }).collect()
+// }
+
+// fn example_use() {
+//     let whole_file = filename_to_string("terms.txt").unwrap();
+//     let wbyl = words_by_line(&whole_file);
+//     println!("{:?}", wbyl)
+// }
 
 use std::env;
 use std::fs;
+use std::io::{self, Read};
+use std::fs::File;
 
+fn file_to_string(s: &str) -> io::Result<String> {
+    let mut file = File::open(s)?;
+    let mut s = String::new();
+    file.read_to_string(&mut s);
+    Ok(s)
+}
 
 fn main() {
-    let content = fs::read_to_string("input.txt")
-    .expect("correctly read input");
+    let content = fs::read_to_string("input.txt").expect("correctly read input");
+
+    let content2 = file_to_string("input.txt")
+    .expect("Coulnd't read the input.txt");
+
+    let elf_bags: Vec<&str> = content2.split("\n\n").collect();
 
 
-    println!("content: {content:?}");
+    let mut max_so_far =0;
+    for bag in elf_bags{
+        let total_for_bag: i32 = bag.lines().map(|x| x.parse::<i32>().unwrap()).sum();
+        max_so_far = if total_for_bag > max_so_far {total_for_bag} else {max_so_far};
+    }
+
+    println!("answer: {}", max_so_far)
+    // let mut acc = 0;
+    // for l in content2.unwrap().lines(){
+    //     ifl.parse<i32>(){
+    //         Ok(),
+    //         Err()
+    //     }
+    //     println!("{}", l)
+    // }
+
+
+    // let split_on_2_newline = content.split("\n\n").collect();
+    // for i in split_on_2_newline{
+    //     print!("i1 {}",i)
+    // }
+
+    // let result = content.split('\n').map(|x| x.parse::<i32>().unwrap());
+
+    // for i in result {
+    //     println!("i {}", i)
+    // }
+
+    // println!("content: {content:?}");
 }
