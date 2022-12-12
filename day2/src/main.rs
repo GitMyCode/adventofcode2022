@@ -34,6 +34,19 @@ B, Paper, 2
 C, Scissors, 3
 
 answer pas 16395
+
+--- Part Two ---
+The Elf finishes helping with the tent and sneaks back over to you. "Anyway, the second column says how the round needs to end: X means you need to lose, Y means you need to end the round in a draw, and Z means you need to win. Good luck!"
+
+The total score is still calculated in the same way, but now you need to figure out what shape to choose so the round ends as indicated. The example above now goes like this:
+
+In the first round, your opponent will choose Rock (A), and you need the round to end in a draw (Y), so you also choose Rock. This gives you a score of 1 + 3 = 4.
+In the second round, your opponent will choose Paper (B), and you choose Rock so you lose (X) with a score of 1 + 0 = 1.
+In the third round, you will defeat your opponent's Scissors with Rock for a score of 1 + 6 = 7.
+Now that you're correctly decrypting the ultra top secret strategy guide, you would get a total score of 12.
+
+Following the Elf's instructions for the second column, what would your total score be if everything goes exactly according to your strategy guide?
+
 */
 use std::{
     fs::File,
@@ -54,6 +67,12 @@ enum Hand {
     Scissors,
 }
 
+enum GameResult {
+    Draw,
+    Lost,
+    Win,
+}
+
 struct GameRound {
     pub myHand: Hand,
     pub elfHand: Hand,
@@ -67,7 +86,41 @@ impl Hand {
             Hand::Scissors => 3,
         };
     }
-    fn hand_challenge_value(&self, other_hand: &Hand) -> i32 {
+
+    fn get_win_hand(&self) -> Hand {
+        return match self {
+            Hand::Paper => Hand::Scissors,
+            Hand::Rock => Hand::Paper,
+            Hand::Scissors => Hand::Rock,
+        };
+    }
+
+    fn get_lose_hand(&self) -> Hand {
+        return match self {
+            Hand::Paper => Hand::Rock,
+            Hand::Rock => Hand::Scissors,
+            Hand::Scissors => Hand::Paper,
+        };
+    }
+
+    fn get_current_self_value(&self) -> Hand {
+        return match self {
+            Hand::Paper => Hand::Paper,
+            Hand::Rock => Hand::Rock,
+            Hand::Scissors => Hand::Scissors,
+        };
+    }
+
+    fn get_hand_from_game_result(&self, wished_result: &str) -> Hand {
+        return match wished_result {
+            "X" => self.get_lose_hand(),
+            "Y" => self.get_current_self_value(),
+            "Z" => self.get_win_hand(),
+            _ => panic!("sadsd"),
+        };
+    }
+
+    fn get_score_from_hand(&self, other_hand: &Hand) -> i32 {
         if (self == other_hand) {
             return 3;
         }
@@ -84,21 +137,36 @@ impl Hand {
 }
 
 impl GameRound {
-    fn new(gameInput: &str) -> GameRound {
-        let splitted: Vec<&str> = gameInput.split_whitespace().collect();
-        let elf_hand = match splitted[0] {
+    fn get_other_hand(input: &Vec<&str>) -> Hand {
+        let elf_hand = match input[0] {
             "A" => Hand::Rock,
             "B" => Hand::Paper,
             "C" => Hand::Scissors,
             _ => panic!("cannot parse hand"),
         };
+        return elf_hand;
+    }
 
-        let my_hand = match splitted[1] {
-            "X" => Hand::Rock,
-            "Y" => Hand::Paper,
-            "Z" => Hand::Scissors,
-            _ => panic!("cannot parse hand"),
+    fn new(gameInput: &str, part2: bool) -> GameRound {
+        let splitted: Vec<&str> = gameInput.split_whitespace().collect();
+        let elf_hand = GameRound::get_other_hand(&splitted);
+
+        let my_hand = if part2 {
+            elf_hand.get_hand_from_game_result(splitted[1])
+        } else {
+            match splitted[1] {
+                "X" => Hand::Rock,
+                "Y" => Hand::Paper,
+                "Z" => Hand::Scissors,
+                _ => panic!("cannot parse hand"),
+            }
         };
+        // let my_hand = match splitted[1] {
+        //     "X" => Hand::Rock,
+        //     "Y" => Hand::Paper,
+        //     "Z" => Hand::Scissors,
+        //     _ => panic!("cannot parse hand"),
+        // };
 
         return GameRound {
             myHand: my_hand,
@@ -107,7 +175,7 @@ impl GameRound {
     }
 
     pub fn get_game_result(&self) -> i32 {
-        return self.myHand.hand_challenge_value(&self.elfHand) + self.myHand.hand_value();
+        return self.myHand.get_score_from_hand(&self.elfHand) + self.myHand.hand_value();
     }
 }
 
@@ -116,12 +184,12 @@ fn main() {
     let mut all_game_round: Vec<GameRound> = Vec::new();
     let mut total = 0;
     for line in file_content.lines() {
-        let game_round = GameRound::new(line);
+        let game_round = GameRound::new(line, true);
         //all_game_round.push(game_round);
         total += game_round.get_game_result();
     }
 
-    println!("result {} ", total) ;
+    println!("result {} ", total);
 
     println!("Hello, world!");
 }
