@@ -28,14 +28,17 @@ In this example, if you were to follow the strategy guide, you would get a total
 What would your total score be if everything goes exactly according to your strategy guide?
 */
 
-
 /*
 A, Rock, 1
 B, Paper, 2
 C, Scissors, 3
 
+answer pas 16395
 */
-use std::{fs::File, io::{BufReader, Read, Lines}};
+use std::{
+    fs::File,
+    io::{BufReader, Lines, Read},
+};
 
 fn read_input_file() -> String {
     let mut file = File::open("input.txt").unwrap();
@@ -44,48 +47,81 @@ fn read_input_file() -> String {
     return fileContent;
 }
 
+#[derive(PartialEq, Eq)]
 enum Hand {
     Rock,
     Paper,
-    Scissors
+    Scissors,
 }
 
-struct GameRound{
-    myHand: Hand,
-    elfHand: Hand,
+struct GameRound {
+    pub myHand: Hand,
+    pub elfHand: Hand,
 }
+
+impl Hand {
+    fn hand_value(&self) -> i32 {
+        return match self {
+            Hand::Rock => 1,
+            Hand::Paper => 2,
+            Hand::Scissors => 3,
+        };
+    }
+    fn hand_challenge_value(&self, other_hand: &Hand) -> i32 {
+        if (self == other_hand) {
+            return 3;
+        }
+
+        if (self == &Hand::Paper && other_hand == &Hand::Rock
+            || self == &Hand::Rock && other_hand == &Hand::Scissors
+            || self == &Hand::Scissors && other_hand == &Hand::Paper)
+        {
+            return 6;
+        }
+
+        return 0;
+    }
+}
+
 impl GameRound {
-    fn new(gameInput: &str) -> GameRound{
-        let splitted: Vec<&str>  = gameInput.split_whitespace().collect();
+    fn new(gameInput: &str) -> GameRound {
+        let splitted: Vec<&str> = gameInput.split_whitespace().collect();
         let elf_hand = match splitted[0] {
-            "A"  => Hand::Rock,
+            "A" => Hand::Rock,
             "B" => Hand::Paper,
             "C" => Hand::Scissors,
-            _ => panic!("cannot parse hand")
+            _ => panic!("cannot parse hand"),
         };
 
         let my_hand = match splitted[1] {
-            "Y"  => Hand::Rock,
-            "X" => Hand::Paper,
+            "X" => Hand::Rock,
+            "Y" => Hand::Paper,
             "Z" => Hand::Scissors,
-            _ => panic!("cannot parse hand")
+            _ => panic!("cannot parse hand"),
         };
 
-        return GameRound { myHand: my_hand, elfHand: elf_hand}
+        return GameRound {
+            myHand: my_hand,
+            elfHand: elf_hand,
+        };
     }
 
-    pub fn get_game_result(&self) -> i32{
-        return 0;
+    pub fn get_game_result(&self) -> i32 {
+        return self.myHand.hand_challenge_value(&self.elfHand) + self.myHand.hand_value();
     }
 }
 
 fn main() {
     let file_content = read_input_file();
     let mut all_game_round: Vec<GameRound> = Vec::new();
-    for line in file_content.lines(){
-        all_game_round.push(GameRound::new(line));
+    let mut total = 0;
+    for line in file_content.lines() {
+        let game_round = GameRound::new(line);
+        //all_game_round.push(game_round);
+        total += game_round.get_game_result();
     }
 
+    println!("result {} ", total) ;
 
     println!("Hello, world!");
 }
