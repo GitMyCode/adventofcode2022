@@ -49,6 +49,51 @@ Finally, one crate is moved from stack 1 to stack 2:
 The Elves just need to know which crate will end up on top of each stack; in this example, the top crates are C in stack 1, M in stack 2, and Z in stack 3, so you should combine these together and give the Elves the message CMZ.
 
 After the rearrangement procedure completes, what crate ends up on top of each stack?
+
+
+--- Part Two ---
+As you watch the crane operator expertly rearrange the crates, you notice the process isn't following your prediction.
+
+Some mud was covering the writing on the side of the crane, and you quickly wipe it away. The crane isn't a CrateMover 9000 - it's a CrateMover 9001.
+
+The CrateMover 9001 is notable for many new and exciting features: air conditioning, leather seats, an extra cup holder, and the ability to pick up and move multiple crates at once.
+
+Again considering the example above, the crates begin in the same configuration:
+
+    [D]
+[N] [C]
+[Z] [M] [P]
+ 1   2   3
+Moving a single crate from stack 2 to stack 1 behaves the same as before:
+
+[D]
+[N] [C]
+[Z] [M] [P]
+ 1   2   3
+However, the action of moving three crates from stack 1 to stack 3 means that those three moved crates stay in the same order, resulting in this new configuration:
+
+        [D]
+        [N]
+    [C] [Z]
+    [M] [P]
+ 1   2   3
+Next, as both crates are moved from stack 2 to stack 1, they retain their order as well:
+
+        [D]
+        [N]
+[C]     [Z]
+[M]     [P]
+ 1   2   3
+Finally, a single crate is still moved from stack 1 to stack 2, but now it's crate C that gets moved:
+
+        [D]
+        [N]
+        [Z]
+[M] [C] [P]
+ 1   2   3
+In this example, the CrateMover 9001 has put the crates in a totally different order: MCD.
+
+Before the rearrangement process finishes, update your simulation so that the Elves know where they should stand to be ready to unload the final supplies. After the rearrangement procedure completes, what crate ends up on top of each stack?
 */
 
 use std::{fs::File, io::Read, usize};
@@ -82,10 +127,7 @@ fn parse_stack(content: &str) -> (Vec<&str>, i32) {
 
     return (stack_value_input, total_stack);
 }
-fn make_stack_vectors2<'a>(
-    stack_values: Vec<&'a str>,
-    total_stack: &i32,
-) -> Vec<VecDeque<&'a str>> {
+fn make_stack_vectors<'a>(stack_values: Vec<&'a str>, total_stack: &i32) -> Vec<VecDeque<&'a str>> {
     let mut all_stack: Vec<VecDeque<&'a str>> = Vec::new();
 
     // [R] [T] [T] [R] [G] [W] [F] [W] [L]
@@ -114,51 +156,6 @@ fn make_stack_vectors2<'a>(
 // &i32         // a reference
 // &'a i32      // a reference with an explicit lifetime
 // &'a mut i32  // a mutable reference with an explicite lifetime
-fn make_stack_vectors<'a>(stack_values: Vec<&'a str>, total_stack: &i32) -> Vec<Vec<&'a str>> {
-    let mut all_stack: Vec<Vec<&'a str>> = Vec::new();
-
-    // [R] [T] [T] [R] [G] [W] [F] [W] [L]
-    // 0123456789
-    //
-    for stack_number in 0..*total_stack {
-        let mut stack: Vec<&'a str> = Vec::new();
-        let start_char_index = if stack_number == 0 {
-            (3 * stack_number)
-        } else {
-            (3 * stack_number) + stack_number
-        };
-        println!("\t{}", stack_number);
-        let mut crate_string: &'a str;
-        for crate_value in &stack_values {
-            let split_to = (start_char_index + 3) as usize;
-            crate_string = &crate_value[start_char_index as usize..split_to];
-            if (!crate_string.trim().is_empty()) {
-                stack.push(crate_string);
-            }
-        }
-        stack.reverse();
-        all_stack.push(stack);
-    }
-    return all_stack;
-}
-
-fn get_number_of_stack(stack_input: &str) -> i32 {
-    let mut all_stack: Vec<Vec<&str>> = Vec::new();
-    let mut stack_input_iterator = stack_input.lines().enumerate().peekable();
-
-    while let Some((index, line)) = stack_input_iterator.next() {}
-
-    let stack_input_lines: Vec<&str> = stack_input.split("\n").collect();
-    let stack_number_line = stack_input_lines[stack_input_lines.len()];
-    let total_stack = stack_number_line
-        .split_whitespace()
-        .last()
-        .unwrap()
-        .parse::<i32>()
-        .unwrap();
-
-    return total_stack;
-}
 
 struct Move {
     from: i32,
@@ -190,37 +187,39 @@ fn parse_moves(content: &str) -> Vec<Move> {
 
 use std::collections::VecDeque;
 
-fn main() {
-    let content = read_input_file();
-    // let split: Vec<&str> = content.split("\n\n").collect();
-    // let stack_input = split[0];
-    // let stack_count = get_number_of_stack(stack_input);
-    // let stack_input_lines: Vec<&str> = stack_input.split("\n").collect();
-    let parsed = parse_stack(&content);
-    let mut all_stack = make_stack_vectors2(parsed.0, &parsed.1);
-    // for (pos, v) in all_stack.iter().enumerate(){
-    //     println!("stack: {}", pos +1);
-
-    //     for c in v{
-    //         println!("{}", c);
-    //     }
-    // }
-
-    //print_stacks(&all_stack);
-
-    let moves = parse_moves(&content);
+fn move_crate_stack(all_stack: &mut Vec<VecDeque<&str>>, moves: Vec<Move>, is_part_2: bool) {
     for move_crate in moves {
         let from = (move_crate.from - 1) as usize;
         let to = (move_crate.to - 1) as usize;
-        {
-            for _ in 0..move_crate.count {
-                let mut ele = all_stack[from].pop_front().unwrap();
+
+        let mut crate_to_move: Vec<&str> = Vec::new();
+
+        for _ in 0..move_crate.count {
+            let mut ele = all_stack[from].pop_front().unwrap();
+            if (!is_part_2) {
                 all_stack[to].push_front(ele);
+            } else {
+                crate_to_move.push(ele);
+            }
+        }
+        if (is_part_2) {
+            crate_to_move.reverse();
+            for cr in crate_to_move {
+                all_stack[to].push_front(cr);
             }
         }
     }
+}
 
-    //print_stacks(&all_stack);
+fn main() {
+    let is_part_2 = true;
+
+    let content = read_input_file();
+    let parsed = parse_stack(&content);
+    let mut all_stack = make_stack_vectors(parsed.0, &parsed.1);
+
+    let moves = parse_moves(&content);
+    move_crate_stack(&mut all_stack, moves, is_part_2);
 
     print_stacks(&all_stack);
     // pas VPBQWRLBS, CVFVBLLSC
