@@ -82,7 +82,10 @@ fn parse_stack(content: &str) -> (Vec<&str>, i32) {
 
     return (stack_value_input, total_stack);
 }
-fn make_stack_vectors2<'a>(stack_values: Vec<&'a str>, total_stack: &i32) -> Vec<VecDeque<&'a str>> {
+fn make_stack_vectors2<'a>(
+    stack_values: Vec<&'a str>,
+    total_stack: &i32,
+) -> Vec<VecDeque<&'a str>> {
     let mut all_stack: Vec<VecDeque<&'a str>> = Vec::new();
 
     // [R] [T] [T] [R] [G] [W] [F] [W] [L]
@@ -101,7 +104,7 @@ fn make_stack_vectors2<'a>(stack_values: Vec<&'a str>, total_stack: &i32) -> Vec
             let split_to = (start_char_index + 3) as usize;
             crate_string = &crate_value[start_char_index as usize..split_to];
             if (!crate_string.trim().is_empty()) {
-                stack.push_front(crate_string);
+                stack.push_back(crate_string);
             }
         }
         all_stack.push(stack);
@@ -203,37 +206,48 @@ fn main() {
     //     }
     // }
 
+    //print_stacks(&all_stack);
+
     let moves = parse_moves(&content);
     for move_crate in moves {
         let from = (move_crate.from - 1) as usize;
+        let to = (move_crate.to - 1) as usize;
         {
             for _ in 0..move_crate.count {
-                let mut ele = all_stack[from].pop_back().unwrap();
-                all_stack[(move_crate.to - 1) as usize].push_front(ele);
+                let mut ele = all_stack[from].pop_front().unwrap();
+                all_stack[to].push_front(ele);
             }
         }
-
     }
 
-    for (pos, v) in all_stack.iter().enumerate() {
-        println!("stack: {}", pos + 1);
-        
-        for c in v {
-            println!("{}", c);
-        }
+    //print_stacks(&all_stack);
+
+    print_stacks(&all_stack);
+    // pas VPBQWRLBS, CVFVBLLSC
+    for (pos, v) in all_stack.iter().enumerate().peekable() {
+        let top_crate = v.front().unwrap();
+        print!("{}", top_crate.chars().nth(1).unwrap());
     }
+
+    // for (pos, v) in all_stack.iter().enumerate() {
+    //     println!("stack: {}", pos + 1);
+
+    //     for c in v {
+    //         println!("{}", c);
+    //     }
+    // }
 }
 
 fn pop_from<'a>(all_vec: &mut Vec<Vec<&'a str>>, index: usize) -> &'a str {
     return all_vec[index].pop().unwrap();
 }
 
-fn print_stacks(all_vec: &Vec<Vec<&str>>){
-   for (pos, v) in all_vec.iter().enumerate() {
+fn print_stacks(all_vec: &Vec<VecDeque<&str>>) {
+    for (pos, v) in all_vec.iter().enumerate() {
         println!("stack: {}", pos + 1);
 
         for c in v {
             println!("{}", c);
         }
-    } 
+    }
 }
