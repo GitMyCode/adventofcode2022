@@ -75,28 +75,65 @@ To begin, find all of the directories with a total size of at most 100000, then 
 Find all of the directories with a total size of at most 100000. What is the sum of the total sizes of those directories?
 */
 
+use std::any::Any;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
+use std::rc::Rc;
+use std::collections::HashMap;
+
+
+
 fn read_input_file() -> String {
-    let mut file = File::open("input.txt").unwrap();
+    let mut file = File::open("input-test.txt").unwrap();
     let mut file_content = String::new();
     file.read_to_string(&mut file_content);
 
     return file_content;
 }
-struct NodeDir {
-    name: String,
-    childs: Vec<Box<dyn FsNode>>,
+
+struct Tree<'a> {
+    root: Rc<RefCell<dyn FsNode>>,
+    map: HashMap<&'a str, Rc<RefCell<dyn FsNode>>>
 }
 
-struct NodeFile {
-    pub name: String,
-    pub size: i32,
+impl<'a> Tree<'a> {
+    fn new(root: Rc<RefCell<dyn FsNode>>) -> Tree<'a> {
+        return Tree{
+            root : root,
+            map : HashMap::new()
+        }
+    }
 }
 
 trait FsNode {
     fn is_dir(&self) -> bool;
-    fn get_value(&self) -> i32;
+    fn get_value(&self) -> u32;
+    fn get_parent(&self) -> Option<Rc<RefCell<NodeDir>>>;
+    fn get_path(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
+}
+
+struct NodeDir {
+    name: String,
+    childs: Vec<Rc<RefCell<dyn FsNode>>>,
+    parent: Option<Rc<RefCell<NodeDir>>>,
+}
+
+impl NodeDir {
+    fn new(name: &str, parent: Option<Rc<RefCell<NodeDir>>>) -> NodeDir {
+        return NodeDir {
+            name: String::from(name),
+            childs: Vec::new(),
+            parent: parent,
+        };
+    }
+}
+
+struct NodeFile {
+    pub name: String,
+    pub size: u32,
+    pub parent: Option<Rc<RefCell<NodeDir>>>,
 }
 
 impl FsNode for NodeDir {
@@ -104,21 +141,191 @@ impl FsNode for NodeDir {
         return true;
     }
 
-    fn get_value(&self) -> i32 {
-        return self.childs.iter().map(|x| x.get_value()).sum();
+    fn get_value(&self) -> u32 {
+        return self
+            .childs
+            .iter()
+            .map(|x| {
+                let x2 = &*x.borrow();
+                return x2.get_value();
+            })
+            .sum();
     }
+
+    fn get_parent(&self) -> Option<Rc<RefCell<NodeDir>>> {
+        return self.parent.clone();
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+     fn get_path(&self) -> String{ 
+         return match &self.parent {
+             Some(p) => {
+                 let tmp  = &*self.parent.clone().unwrap();
+                 return tmp.borrow().get_path().to_string() + &self.name;
+             },
+             None => self.name.clone()
+         }
+     }
 }
 
+impl<'a> NodeFile {
+    fn new(name: &str, size: u32, parent: Rc<RefCell<NodeDir>>) -> NodeFile {
+        return NodeFile {
+            name: String::from(name),
+            size: size,
+            parent: Some(parent),
+        };
+    }
+}
 impl FsNode for NodeFile {
     fn is_dir(&self) -> bool {
         return false;
     }
 
-    fn get_value(&self) -> i32 {
+    fn get_value(&self) -> u32 {
         return self.size;
+    }
+
+    fn get_parent(&self) -> Option<Rc<RefCell<NodeDir>>> {
+        return self.parent.clone();
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn get_path(&self) -> String {
+        let tmp  = &*self.parent.clone().unwrap();
+        return tmp.borrow().get_path() + &self.name;
+    }
+}
+
+fn parse_ls_dir_line<'a>(line: &str, parent: Rc<RefCell<NodeDir>>) -> NodeDir {
+    let mut split = line.split_whitespace();
+    let dir_name = split.nth(1).unwrap();
+    let new_node = NodeDir::new(dir_name, Some(parent));
+
+    return new_node;
+}
+
+fn parse_ls_file_line<'a>(line: &str, parent: Rc<RefCell<NodeDir>>) -> NodeFile {
+    let mut split = line.split_whitespace();
+    let file_size = split.nth(0).unwrap().parse::<u32>().unwrap();
+    let file_name = split.nth(0).unwrap();
+
+    let new_node = NodeFile::new(file_name, file_size, parent);
+    return new_node;
+}
+
+// fn read_dir_output<'a, T>(line_iter: &mut std::iter::Peekable<T>, node: Rc<RefCell<NodeDir>>)
+// where
+//     T: Iterator<Item = (usize, &'a str)>,
+// {
+//     return Rc::new(RefCell::new(NodeDir::new()));
+// }
+
+fn read_ls_output<'a, T>(line_iter: &mut std::iter::Peekable<T>, node: Rc<RefCell<NodeDir>>)
+where
+    T: Iterator<Item = (usize, &'a str)>,
+{
+    while let Some((index, line)) = line_iter.next() {
+        match line {
+            x if x.starts_with("dir") => {
+                let new_node = parse_ls_dir_line(&x, node.clone());
+                node.borrow_mut()
+                    .childs
+                    .push(Rc::new(RefCell::new(new_node)));
+            }
+            _ => {
+                let new_node = parse_ls_file_line(line, node.clone());
+                node.borrow_mut()
+                    .childs
+                    .push(Rc::new(RefCell::new(new_node)));
+            }
+        }
+
+        if let Some((_, peek_val)) = line_iter.peek() {
+            if peek_val.starts_with("$") {
+                break;
+            }
+        }
+    }
+}
+
+fn parse_command_to_tree<'a>(input: &str) -> Tree {
+    let mut lines_iter = input.lines().into_iter().enumerate().peekable();
+    lines_iter.next();
+    let mut node = NodeDir::new("/", None);
+    let rootNode = Rc::new(RefCell::new(node));
+    let tree = Tree::new(rootNode.clone());
+    let mut current_node = rootNode.clone();
+    while let Some((index, line)) = lines_iter.next() {
+        println!("path: {}", current_node.borrow().get_path());
+        match line {
+            x if x.starts_with("$ cd") => {
+                let folder_name = x.split_whitespace().nth(2).unwrap().trim();
+                if (folder_name == "..") {
+                    let tmp = current_node.clone();
+                    current_node = tmp.borrow().get_parent().unwrap();
+                } else {
+                    let n = Rc::new(RefCell::new(NodeDir::new(
+                        folder_name,
+                        Some(current_node.clone()),
+                    )));
+                    current_node = n.clone();
+                }
+            }
+            x if x.starts_with("$ ls") => read_ls_output(&mut lines_iter, current_node.clone()),
+            _ => println!("{} starts with something else", line),
+        }
+    }
+
+    return tree;
+}
+
+/*
+ fn traverse<F>(&self, f: &F, seen: &mut HashSet<&'static str>)
+        where F: Fn(&'static str)
+    {
+        if seen.contains(&self.datum) {
+            return;
+        }
+        f(self.datum);
+        seen.insert(self.datum);
+        for n in &self.edges {
+            n.borrow().traverse(f, seen);
+        }
+    }
+
+*/
+
+fn traverse(n: Rc<RefCell<dyn FsNode>>) {
+    let node: &dyn FsNode = &*n.borrow();
+    if (node.is_dir()) {
+        let dir: &NodeDir = node
+            .as_any()
+            .downcast_ref::<NodeDir>()
+            .expect("Should be dir");
+
+        println!("{} {}", dir.name, dir.get_value());
+        for c in &dir.childs {
+            traverse(c.clone());
+        }
+    } else {
+        let file: &NodeFile = node
+            .as_any()
+            .downcast_ref::<NodeFile>()
+            .expect("should be file");
+        println!("{} {}", file.name, file.size);
     }
 }
 
 fn main() {
-    println!("Hello, world!");
+    let content = read_input_file();
+    let root = parse_command_to_tree(&content);
+
+    traverse(root.root);
 }
