@@ -84,7 +84,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 fn read_input_file() -> String {
-    let mut file = File::open("input-test.txt").unwrap();
+    let mut file = File::open("input.txt").unwrap();
     let mut file_content = String::new();
     file.read_to_string(&mut file_content);
 
@@ -356,17 +356,24 @@ fn make_path(name: &str, parent: &Rc<RefCell<NodeDir>>) -> String {
 
 */
 
-fn traverse(n: Rc<RefCell<dyn FsNode>>) {
+fn traverse(n: Rc<RefCell<dyn FsNode>>, sum_all: &mut u32) {
     let node: &dyn FsNode = &*n.borrow();
+
+
+
     if (node.is_dir()) {
         let dir: &NodeDir = node
             .as_any()
             .downcast_ref::<NodeDir>()
             .expect("Should be dir");
 
-        println!("folderpath: {} {}", dir.name, dir.get_value());
+        if(dir.get_value() <= 100000){
+            *sum_all = *sum_all + dir.get_value();
+        }
+
+        println!("folderpath: {} {}", dir.path, dir.get_value());
         for c in &dir.childs {
-            traverse(c.clone());
+            traverse(c.clone(), sum_all);
         }
     } else {
         let file: &NodeFile = node
@@ -397,6 +404,8 @@ fn traverse(n: Rc<RefCell<dyn FsNode>>) {
 fn main() {
     let content = read_input_file();
     let root = parse_command_to_tree(&content);
+    let mut sum =0; 
+    traverse(root, &mut sum);
 
-    traverse(root);
+    println!("answer: {}", sum);
 }
