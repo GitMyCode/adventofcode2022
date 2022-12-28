@@ -77,12 +77,11 @@ Find all of the directories with a total size of at most 100000. What is the sum
 
 use std::any::Any;
 use std::cell::RefCell;
-use std::fs::File;
-use std::io::Read;
-use std::rc::Rc;
 use std::collections::HashMap;
-
-
+use std::fs::File;
+use std::io::{BufRead, Read};
+use std::path::PathBuf;
+use std::rc::Rc;
 
 fn read_input_file() -> String {
     let mut file = File::open("input-test.txt").unwrap();
@@ -92,17 +91,17 @@ fn read_input_file() -> String {
     return file_content;
 }
 
-struct Tree<'a> {
+struct Tree {
     root: Rc<RefCell<dyn FsNode>>,
-    map: HashMap<&'a str, Rc<RefCell<dyn FsNode>>>
+    map: HashMap<String, Rc<RefCell<NodeDir>>>,
 }
 
-impl<'a> Tree<'a> {
-    fn new(root: Rc<RefCell<dyn FsNode>>) -> Tree<'a> {
-        return Tree{
-            root : root,
-            map : HashMap::new()
-        }
+impl<'a> Tree {
+    fn new(root: Rc<RefCell<dyn FsNode>>) -> Tree {
+        return Tree {
+            root: root,
+            map: HashMap::new(),
+        };
     }
 }
 
@@ -110,28 +109,47 @@ trait FsNode {
     fn is_dir(&self) -> bool;
     fn get_value(&self) -> u32;
     fn get_parent(&self) -> Option<Rc<RefCell<NodeDir>>>;
-    fn get_path(&self) -> String;
     fn as_any(&self) -> &dyn Any;
 }
 
 struct NodeDir {
     name: String,
+    path2: std::path::PathBuf,
+    path: String,
     childs: Vec<Rc<RefCell<dyn FsNode>>>,
     parent: Option<Rc<RefCell<NodeDir>>>,
 }
 
 impl NodeDir {
     fn new(name: &str, parent: Option<Rc<RefCell<NodeDir>>>) -> NodeDir {
+        let mut path2 = std::path::PathBuf::from(name);
+        let mut full_path = String::from("/");
+        if (parent.is_some()) {
+            let parent_path_buf = parent.as_ref().unwrap().borrow().path2.clone();
+            full_path = String::from(
+                parent_path_buf
+                    .join(std::path::Path::new(name))
+                    .to_str()
+                    .unwrap(),
+            );
+            path2 = parent_path_buf.join(path2).to_path_buf();
+        } else {
+        }
+
         return NodeDir {
             name: String::from(name),
             childs: Vec::new(),
+            path2: path2.to_path_buf(),
             parent: parent,
+            path: full_path,
         };
     }
 }
 
 struct NodeFile {
     pub name: String,
+    pub path2: PathBuf,
+    pub path: String,
     pub size: u32,
     pub parent: Option<Rc<RefCell<NodeDir>>>,
 }
@@ -159,24 +177,27 @@ impl FsNode for NodeDir {
     fn as_any(&self) -> &dyn Any {
         self
     }
-
-     fn get_path(&self) -> String{ 
-         return match &self.parent {
-             Some(p) => {
-                 let tmp  = &*self.parent.clone().unwrap();
-                 return tmp.borrow().get_path().to_string() + &self.name;
-             },
-             None => self.name.clone()
-         }
-     }
 }
 
 impl<'a> NodeFile {
     fn new(name: &str, size: u32, parent: Rc<RefCell<NodeDir>>) -> NodeFile {
+        let mut path2 = std::path::PathBuf::from(name);
+        let mut full_path = String::from("/");
+        let parent_path_buf = parent.as_ref().borrow().path2.clone();
+        full_path = String::from(
+            parent_path_buf
+                .join(std::path::Path::new(name))
+                .to_str()
+                .unwrap(),
+        );
+        path2 = parent_path_buf.join(path2).to_path_buf();
+
         return NodeFile {
             name: String::from(name),
+            path2: path2,
             size: size,
             parent: Some(parent),
+            path: full_path,
         };
     }
 }
@@ -196,11 +217,10 @@ impl FsNode for NodeFile {
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
 
-    fn get_path(&self) -> String {
-        let tmp  = &*self.parent.clone().unwrap();
-        return tmp.borrow().get_path() + &self.name;
-    }
+fn get_path(node: Rc<RefCell<NodeDir>>) -> String {
+    return String::from(node.borrow().path.clone() + "/" + &node.borrow().name);
 }
 
 fn parse_ls_dir_line<'a>(line: &str, parent: Rc<RefCell<NodeDir>>) -> NodeDir {
@@ -227,17 +247,21 @@ fn parse_ls_file_line<'a>(line: &str, parent: Rc<RefCell<NodeDir>>) -> NodeFile 
 //     return Rc::new(RefCell::new(NodeDir::new()));
 // }
 
-fn read_ls_output<'a, T>(line_iter: &mut std::iter::Peekable<T>, node: Rc<RefCell<NodeDir>>)
-where
+fn read_ls_output<'a, T>(
+    line_iter: &mut std::iter::Peekable<T>,
+    node: Rc<RefCell<NodeDir>>,
+    tree: &mut Tree,
+) where
     T: Iterator<Item = (usize, &'a str)>,
 {
     while let Some((index, line)) = line_iter.next() {
         match line {
             x if x.starts_with("dir") => {
                 let new_node = parse_ls_dir_line(&x, node.clone());
-                node.borrow_mut()
-                    .childs
-                    .push(Rc::new(RefCell::new(new_node)));
+                let key = new_node.path.clone();
+                let allo = Rc::new(RefCell::new(new_node));
+                node.borrow_mut().childs.push(allo.clone());
+                tree.map.insert(key, allo.clone());
             }
             _ => {
                 let new_node = parse_ls_file_line(line, node.clone());
@@ -255,15 +279,16 @@ where
     }
 }
 
-fn parse_command_to_tree<'a>(input: &str) -> Tree {
+fn parse_command_to_tree<'a>(input: &str) -> Rc<RefCell<NodeDir>> {
     let mut lines_iter = input.lines().into_iter().enumerate().peekable();
     lines_iter.next();
     let mut node = NodeDir::new("/", None);
     let rootNode = Rc::new(RefCell::new(node));
-    let tree = Tree::new(rootNode.clone());
+    let mut tree = Tree::new(rootNode.clone());
     let mut current_node = rootNode.clone();
+    //let mut path_buf: String;
     while let Some((index, line)) = lines_iter.next() {
-        println!("path: {}", current_node.borrow().get_path());
+        println!("path: {}", current_node.borrow().path);
         match line {
             x if x.starts_with("$ cd") => {
                 let folder_name = x.split_whitespace().nth(2).unwrap().trim();
@@ -271,21 +296,50 @@ fn parse_command_to_tree<'a>(input: &str) -> Tree {
                     let tmp = current_node.clone();
                     current_node = tmp.borrow().get_parent().unwrap();
                 } else {
-                    let n = Rc::new(RefCell::new(NodeDir::new(
-                        folder_name,
-                        Some(current_node.clone()),
-                    )));
-                    current_node = n.clone();
+                    let path_buf = make_path(folder_name, &current_node);
+                    let key = path_buf.as_str();
+                    let folder = match tree.map.get(key) {
+                        Some(v) => v.clone(),
+                        None => {
+                            Rc::new(RefCell::new(NodeDir::new(folder_name, Some(current_node))))
+                        }
+                    };
+
+                    tree.map.insert(path_buf, folder.clone());
+                    current_node = folder.clone();
                 }
             }
-            x if x.starts_with("$ ls") => read_ls_output(&mut lines_iter, current_node.clone()),
+            x if x.starts_with("$ ls") => {
+                read_ls_output(&mut lines_iter, current_node.clone(), &mut tree)
+            }
             _ => println!("{} starts with something else", line),
         }
     }
 
-    return tree;
+    return rootNode.clone();
 }
 
+fn make_path(name: &str, parent: &Rc<RefCell<NodeDir>>) -> String {
+    let path = std::path::PathBuf::from(name);
+    let parent_path_buf = parent.as_ref().borrow().path2.clone();
+    let final_path = parent_path_buf.join(path).to_path_buf();
+    return final_path.to_str().unwrap().to_string();
+}
+
+// fn make_path_buf<'a>(name: &str, parent: &Rc<RefCell<NodeDir>>) -> &'a str {
+//     let mut path2 = std::path::PathBuf::from(name);
+//     let parent_path_buf = parent.as_ref().borrow().path2.clone();
+//     path2 = parent_path_buf.join(path2).to_path_buf();
+//     let path_str = path2.to_str().unwrap();
+//     return &path_str;
+// }
+
+// fn make_path_buf<'a>(name: &str, parent: &Rc<RefCell<NodeDir>>) -> &'a str {
+//     let mut path2 = std::path::PathBuf::from(name);
+//     let parent_path_buf = parent.as_ref().borrow().path2.clone();
+//     path2 = parent_path_buf.join(path2).to_path_buf();
+//     return String::from(path2.to_str().unwrap()).as_str();
+// }
 /*
  fn traverse<F>(&self, f: &F, seen: &mut HashSet<&'static str>)
         where F: Fn(&'static str)
@@ -310,7 +364,7 @@ fn traverse(n: Rc<RefCell<dyn FsNode>>) {
             .downcast_ref::<NodeDir>()
             .expect("Should be dir");
 
-        println!("{} {}", dir.name, dir.get_value());
+        println!("folderpath: {} {}", dir.name, dir.get_value());
         for c in &dir.childs {
             traverse(c.clone());
         }
@@ -319,13 +373,30 @@ fn traverse(n: Rc<RefCell<dyn FsNode>>) {
             .as_any()
             .downcast_ref::<NodeFile>()
             .expect("should be file");
-        println!("{} {}", file.name, file.size);
+        println!("filepath: {} {}", file.path, file.size);
     }
 }
+
+// fn write_in_tree() {
+//     let mut tree = Tree {
+//         root: Rc::new(RefCell::new(NodeDir::new("/", None))),
+//         map: HashMap::new(),
+//     };
+
+//     let file = std::fs::File::open("path/to/file.txt").unwrap();
+//     let reader = std::io::BufReader::new(file);
+
+//     for line in reader.lines() {
+//         let line = line.unwrap();
+//         let key = &line;
+//         let value = Rc::new(RefCell::new(NodeDir::new(line.as_str(), None)));
+//         tree.map.insert(key, value);
+//     }
+// }
 
 fn main() {
     let content = read_input_file();
     let root = parse_command_to_tree(&content);
 
-    traverse(root.root);
+    traverse(root);
 }
