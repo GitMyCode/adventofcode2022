@@ -73,6 +73,28 @@ As the outermost directory, / contains every file. Its total size is 48381165, t
 To begin, find all of the directories with a total size of at most 100000, then calculate the sum of their total sizes. In the example above, these directories are a and e; the sum of their total sizes is 95437 (94853 + 584). (As in this example, this process can count files more than once!)
 
 Find all of the directories with a total size of at most 100000. What is the sum of the total sizes of those directories?
+
+
+--- Part Two ---
+Now, you're ready to choose a directory to delete.
+
+The total disk space available to the filesystem is 70000000. To run the update, you need unused space of at least 30000000. You need to find a directory you can delete that will free up enough space to run the update.
+
+In the example above, the total size of the outermost directory (and thus the total amount of used space) is 48381165; this means that the size of the unused space must currently be 21618835, which isn't quite the 30000000 required by the update. Therefore, the update still requires a directory with total size of at least 8381165 to be deleted before it can run.
+
+To achieve this, you have the following options:
+
+Delete directory e, which would increase unused space by 584.
+Delete directory a, which would increase unused space by 94853.
+Delete directory d, which would increase unused space by 24933642.
+Delete directory /, which would increase unused space by 48381165.
+Directories e and a are both too small; deleting them would not free up enough space. However, directories d and / are both big enough! Between these, choose the smallest: d, increasing unused space by 24933642.
+
+Find the smallest directory that, if deleted, would free up enough space on the filesystem to run the update. What is the total size of that directory?
+
+
+
+
 */
 
 use std::any::Any;
@@ -288,7 +310,7 @@ fn parse_command_to_tree<'a>(input: &str) -> Rc<RefCell<NodeDir>> {
     let mut current_node = rootNode.clone();
     //let mut path_buf: String;
     while let Some((index, line)) = lines_iter.next() {
-        println!("path: {}", current_node.borrow().path);
+       // println!("path: {}", current_node.borrow().path);
         match line {
             x if x.starts_with("$ cd") => {
                 let folder_name = x.split_whitespace().nth(2).unwrap().trim();
@@ -356,10 +378,11 @@ fn make_path(name: &str, parent: &Rc<RefCell<NodeDir>>) -> String {
 
 */
 
-fn traverse(n: Rc<RefCell<dyn FsNode>>, sum_all: &mut u32) {
+const max_filesystem: u32 = 70000000;
+const space_needed: u32 = 30000000;
+
+fn traverse(n: Rc<RefCell<dyn FsNode>>, sum_all: &mut u32, space_to_freed: &u32, last_size_to_free: &mut u32) {
     let node: &dyn FsNode = &*n.borrow();
-
-
 
     if (node.is_dir()) {
         let dir: &NodeDir = node
@@ -367,22 +390,52 @@ fn traverse(n: Rc<RefCell<dyn FsNode>>, sum_all: &mut u32) {
             .downcast_ref::<NodeDir>()
             .expect("Should be dir");
 
-        if(dir.get_value() <= 100000){
+        if (dir.get_value() <= 100000) {
             *sum_all = *sum_all + dir.get_value();
         }
 
-        println!("folderpath: {} {}", dir.path, dir.get_value());
+        let current_size = dir.get_value();
+        if(*space_to_freed <= current_size && current_size < *last_size_to_free){
+            *last_size_to_free = current_size;
+            println!("found folder to delete {} size: {}", dir.path, current_size);
+        }
+
+        
+
+       // println!("folderpath: {} {}", dir.path, dir.get_value());
         for c in &dir.childs {
-            traverse(c.clone(), sum_all);
+            traverse(c.clone(), sum_all, space_to_freed, last_size_to_free);
         }
     } else {
         let file: &NodeFile = node
             .as_any()
             .downcast_ref::<NodeFile>()
             .expect("should be file");
-        println!("filepath: {} {}", file.path, file.size);
+       // println!("filepath: {} {}", file.path, file.size);
     }
 }
+
+// fn find_directory_to_delete(
+//     node: Rc<RefCell<impl FsNode>>,
+//     space_to_freed: &u32,
+//     found_dir: &mut Rc<RefCell<impl FsNode>>,
+// ) {
+//     let current_node = &*node.borrow();
+//     if (current_node.is_dir()) {
+//         let current_dir = current_node.as_any().downcast_ref::<NodeDir>().unwrap();
+//         let last_found_dir_value = found_dir.borrow().get_value();
+//         let current_value = current_node.get_value();
+
+//         if (*space_to_freed <= current_value && current_value < last_found_dir_value) {
+//             *found_dir = node;
+//         }
+//         for child in current_dir.childs {
+//             if (child.borrow().is_dir()) {
+//                 find_directory_to_delete(child, space_to_freed, found_dir)
+//             }
+//         }
+//     }
+// }
 
 // fn write_in_tree() {
 //     let mut tree = Tree {
@@ -404,8 +457,13 @@ fn traverse(n: Rc<RefCell<dyn FsNode>>, sum_all: &mut u32) {
 fn main() {
     let content = read_input_file();
     let root = parse_command_to_tree(&content);
-    let mut sum =0; 
-    traverse(root, &mut sum);
+    let mut sum = 0;
+    //traverse(root, &mut sum);
+
+    let total_space = root.borrow().get_value();
+    let mut root_size = root.borrow().get_value();
+    let space_to_free = space_needed - (max_filesystem - total_space);
+    traverse(root, &mut sum, &space_to_free, &mut root_size);
 
     println!("answer: {}", sum);
 }
